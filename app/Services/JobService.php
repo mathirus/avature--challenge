@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Events\JobCreated;
 use App\Repositories\JobRepository;
+use Illuminate\Support\Facades\Log;
 
 class JobService
 {
@@ -23,7 +24,11 @@ class JobService
     {
         $job = $this->jobRepository->create($data);
 
-        event(new JobCreated($job));
+        try {
+            event(new JobCreated($job));
+        } catch (\Exception $e) {
+            Log::error('Error triggering JobCreated event: ' . $e->getMessage());
+        }
 
         return $job;
     }
