@@ -9,6 +9,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use PhpParser\Builder;
 
 class SendJobAlert implements ShouldQueue
 {
@@ -30,12 +31,16 @@ class SendJobAlert implements ShouldQueue
 
     private function getSubscriptionsMatchingJob($job)
     {
-        return Subscription::where(function ($query) use ($job) {
-            $this->applyCountryFilter($query, $job->country_id);
-            $this->applySkillsFilter($query, $job->skills);
-            $this->applyNameFilter($query, $job->name);
+        Log::info('Job details', ['job' => $job]);
+        $subscriptions = Subscription::where(function ($query) use ($job) {
+         //   $this->applyCountryFilter($query, $job->country_id);
+         //   $this->applySkillsFilter($query, $job->skills);
+         //   $this->applyNameFilter($query, $job->name);
             $this->applySalaryFilter($query, $job->salary);
         })->get();
+        Log::info('Subscriptions matching job', ['subscriptions' => $subscriptions]);
+
+        return $subscriptions;
     }
 
     private function applyCountryFilter($query, $countryId)
@@ -48,13 +53,14 @@ class SendJobAlert implements ShouldQueue
     private function applySkillsFilter($query, $skills)
     {
         if (!empty($skills)) {
-            $query->where(function ($query) use ($skills) {
-                foreach ($skills as $skill) {
-                    $query->orWhereJsonContains('filters->skills', strtolower($skill));
-                }
-            });
+            $skills = array_map('strtolower', $skills);
+            Log::info('Applying skills filter', ['skills' => $skills]);
+            foreach ($skills as $skill) {
+                $query->orWhereJsonContains('filters->skills', $skill);
+            }
         }
     }
+
 
     private function applyNameFilter($query, $name)
     {
@@ -68,18 +74,21 @@ class SendJobAlert implements ShouldQueue
         }
     }
 
-    private function applySalaryFilter($query, $salary)
+    private function applySalaryFilter(\Illuminate\Database\Eloquent\Builder $query, $salary)
     {
         if (!empty($salary)) {
             $query->where(function ($query) use ($salary) {
                 $query->where(function ($query) use ($salary) {
-                    $query->whereNull('filters->salary_min')->orWhere('filters->salary_min', '<=', $salary);
+                    $query->where('filters->salary_min', '<=', $salary);
+
                 });
                 $query->where(function ($query) use ($salary) {
-                    $query->whereNull('filters->salary_max')->orWhere('filters->salary_max', '>=', $salary);
+                    $query->where('filters->salary_max', '>=', $salary);
                 });
+
             });
         }
+
     }
 
     private function sendJobAlerts($job, $subscriptions)
